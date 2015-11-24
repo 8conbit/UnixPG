@@ -13,11 +13,8 @@ int main(int argc, char* argv[]){
 	struct sockaddr_in serv_addr;
 	char message[BUF_SIZE];
 	int snd_len, rcv_len, rcv_buf;
-
-	if(argc!=3){
-		printf("Usage : %s <IP> <port>\n", argv[0]);
-		exit(1);
-	}
+	char serv_ip[] = "125.129.123.2";
+	int serv_port = 9797;
 
 	sock = socket(PF_INET, SOCK_STREAM, 0);
 	if(sock == -1)
@@ -25,8 +22,8 @@ int main(int argc, char* argv[]){
 	
 	memset(&serv_addr, 0, sizeof(serv_addr));
 	serv_addr.sin_family=AF_INET;
-	serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
-	serv_addr.sin_port = htons(atoi(argv[2]));
+	serv_addr.sin_addr.s_addr = inet_addr(serv_ip);
+	serv_addr.sin_port = htons(serv_port);
 
 	if(connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
 		error_handling("connect() error!");

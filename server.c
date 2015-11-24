@@ -20,6 +20,7 @@ int main(int argc, char *argv[]){
 	char quit[] = "----QUIT\n";
 	int str_len;
 	struct sockaddr_in serv_addr, clnt_addr;
+	int serv_port = 9797;
 	socklen_t clnt_addr_size, optlen;
 
 	pid_t pid;
@@ -28,10 +29,6 @@ int main(int argc, char *argv[]){
 
 	struct sigaction act;
 
-	if(argc!=2){
-		printf("Usage : %s <port>\n", argv[0]);
-		exit(1);
-	}
 	serv_sock = socket(PF_INET, SOCK_STREAM, 0);
 	if(serv_sock == -1 )
 		error_handler("socket() error");
@@ -44,7 +41,7 @@ int main(int argc, char *argv[]){
 	memset(&serv_addr, 0, sizeof(serv_addr));//init
 	serv_addr.sin_family=AF_INET;
 	serv_addr.sin_addr.s_addr=htonl(INADDR_ANY);//INADDR_ANY = serv ip
-	serv_addr.sin_port=htons(atoi(argv[1])); //port to network endian
+	serv_addr.sin_port=htons(serv_port); //port to network endian
 
 	if(bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
 		error_handler("bind() error");
