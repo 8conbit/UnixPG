@@ -23,44 +23,26 @@ int main(int argc, char *argv[]){
 	char message[BUF_SIZE];
 	char quit[] = "----QUIT\n";
 	int str_len;
-	struct sockaddr_in serv_addr, clnt_addr;
+	struct sockaddr_in clnt_addr;
 	socklen_t addr_size;
 
-	int i, j, num_ret, wfd = 0;
+	int i, num_ret, wfd = 0;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
 	int num_clnt=0;
-	
-	socklen_t optlen;
-	int option;
 
+	struct pollfd tmp_pfd;
 
-	serv_sock = socket(PF_INET, SOCK_STREAM, 0);
+	addr_size = sizeof(clnt_addr);
+
+	serv_sock = create_serv_sock();
 	if(serv_sock == -1 )
 		error_handler("socket() error");
-	
-	optlen=sizeof(option);
-	option=1;
-	setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, (void*)&option, optlen);
-	//REUSEADDR. time-wait solv.
-	
-	memset(&serv_addr, 0, sizeof(serv_addr));//init
-	serv_addr.sin_family=AF_INET;
-	serv_addr.sin_addr.s_addr=htonl(INADDR_ANY);//INADDR_ANY = serv ip
-	serv_addr.sin_port=htons(PORT); //port to network endian
-
-	if(bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
-		error_handler("bind() error");
-
-	if(listen(serv_sock, 5) == -1)//keep on listening
-		error_handler("listen() error");
-	
-
-	addr_size = sizeof(
 
 
 	if((wfd = open("/dev/poll", O_RDWR)) < 0)
 		error_handler("/dev/poll error");
+
 
 	pollfd = (struct pollfd*)malloc(sizeof(struct pollfd)*MAXCLNT);	
 	if(pollfd == NULL){
@@ -68,18 +50,13 @@ int main(int argc, char *argv[]){
 		error_handler("malloc error");
 	}
 	
-	pollfd[0].fd = serv_sock;
-	pollfd[0].events = POLLIN;
-	pollfd[0].revents =0;
+	tmp_pfd.fd = serv_sock;
+	tmp_pfd.events = POLLIN;
+	tmp_pfd.revents =0;
 
-	for(i = 1; i < MAXCLNT; i++){
-		pollfd[i].fd = 0;
-		pollfd[i].events = POLLIN;
-		pollfd[i].revents =0;
-	}
 	
-	if(write(wfd, pollfd, sizeof(struct pollfd)*MAXCLNT) != sizeof(struct pollfd)*MAXCLNT){
-		close(wfd); //&pollfd[0] = pollfd
+	if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
+		close(wfd); 
 		free(pollfd);
 		error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 	}//enroll socket fds to /dev/poll
@@ -87,6 +64,7 @@ int main(int argc, char *argv[]){
 	dopoll.dp_timeout = -1;//wait serv listen event, clnt rcv event
 	dopoll.dp_fds = pollfd;
 	dopoll.dp_nfds = MAXCLNT;
+
 
 	while(1){  
 		printf("wait ioctl signal...\n");//__LINE__ ???
@@ -99,7 +77,6 @@ int main(int argc, char *argv[]){
 			error_handler("ioctl DP_POLL failed");
 		}
 
-		sleep(1);
 		for(i = 0; i < num_ret; i++){
 			if((dopoll.dp_fds[i].fd == serv_sock) && (num_clnt < MAXCLNT-1)){ //serv listen
 				clnt_sock=accept(serv_sock, (struct sockaddr*)&clnt_addr, &addr_size);
@@ -110,36 +87,50 @@ int main(int argc, char *argv[]){
 				}
 				
 				printf("Accept clnt sock : %d\n", clnt_sock);
-				num_clnt++;
-				dopoll.dp_fds[num_clnt].fd = clnt_sock; //dOaks qkRnjeh ehlsk?
-			/*	
-				if(write(wfd, pollfd, sizeof(struct pollfd) * MAXCLNT) != sizeof(struct pollfd)*MAXCLNT)		{
+				tmp_pfd.fd = clnt_sock; 
+				tmp_pfd.events = POLLIN; //when disconnect, POLLREMOVE
+				tmp_pfd.revents = 0;
+				
+				if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
 					close(wfd);
 					free(pollfd);
 					error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 				}
-				*/
+				
+				
 
 			}
 			else{ // clnt rcv event
-				printf("clnt rcv");
-				
+				printf("clnt test rcv,----------- i = [%d]\n", i);
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
+				printf("read value = (str_len) %d\n",str_len);
 				if(str_len == 0){
 					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));	
 					//this fd should be removed from monitored set before close
 					//I have to num_clnt-- but if this override valid fd?
-					for(j = 0; j < num_clnt; j++)
-						if(dopoll.dp_fds[i].fd == pollfd[j].fd)
-							break;
-					
-					pollfd[j].events = POLLREMOVE;
-					close(dopoll.dp_fds[i].fd);
-				}
-
-				write(dopoll.dp_fds[i].fd, message, str_len);
 				
-			
+					printf("**********************Disconnect Client %d\n", dopoll.dp_fds[i].fd);
+					tmp_pfd.fd = dopoll.dp_fds[i].fd;	
+					tmp_pfd.events = POLLREMOVE; 
+					tmp_pfd.revents = 0;
+
+//			printf("i = %d, pollfd = %d, dopoll= %d\n", i, pollfd[i].fd, dopoll.dp_fds[i].fd);
+
+										
+					if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
+						close(wfd);
+						free(pollfd);
+						error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
+					}
+					
+					
+
+					printf("success write\n");
+					close(dopoll.dp_fds[i].fd); //OK
+				}
+				else{
+					write(dopoll.dp_fds[i].fd, message, str_len);
+				}
 			}
 		}	
 	}
