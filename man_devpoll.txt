@@ -32,6 +32,15 @@ write는 성공시 write한 byte 수, 실패시 -1을 return.
 
 DP_POLL ioctl은 poll events가 일어났는지 검색하기 위해서 쓴다.
 이경우 revents는 사용하지 않는다.
+wfd already has dopoll data(write). so &dopoll is used to save ioctl return informaiton.
+
 
 DP_ISPOLLED ioctl은 해당 fd가 pfd에 포함되어있는지 확인하기 위해 쓴다. 
 이경우 revents는 currently polled events 정보를 나타낸다.
+
+
+MUST!!! you should remove a closed file descriptor from a monitored poll set. 
+
+
+
+if event occur, that fd is pollfd[0].fd (=dopoll.dp_fds[0].fd    at the same time)
