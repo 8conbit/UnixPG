@@ -11,7 +11,7 @@
 
 
 #define BUF_SIZE 1024
-#define MAXCLNT 256
+#define MAXCLNT 255 
 #define PORT 9797
 
 void error_handler(char *message);
@@ -69,10 +69,10 @@ int main(int argc, char *argv[]){
 
 
 	while(1){  
-		printf("wait ioctl signal...\n");//__LINE__ ???
+		printf("wait ioctl...\n");
 		num_ret = ioctl(wfd, DP_POLL, &dopoll);
-		printf("after ioctl. num_ret = %d\n", num_ret);
-		printf("num_clnt = %d\n", num_clnt);	
+		printf("num_ret = %d, ", num_ret);
+
 		if(num_ret == -1){
 			close(wfd);
 			free(pollfd);
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]){
 					continue;
 				}
 				
-				printf("Accept clnt sock : %d\n", clnt_sock[num_clnt]);
+				printf("[Accept] clnt sock : %d\n", clnt_sock[num_clnt]);
 				tmp_pfd.fd = clnt_sock[num_clnt]; 
 				tmp_pfd.events = POLLIN; //when disconnect, POLLREMOVE
 				tmp_pfd.revents = 0;
@@ -99,36 +99,35 @@ int main(int argc, char *argv[]){
 					error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 				}
 				num_clnt++;
+				printf("num_clnt = %d\n", num_clnt);
 
 			}
 			else{ // clnt rcv event
-				printf("clnt test rcv,----------- i = [%d]\n", i);
+				printf("[Recieve]----- i = [%d]\n", i);
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
-				printf("read value = (str_len) %d\n",str_len);
 				
 				if(str_len == 0){
 					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));	
-					//this fd should be removed from monitored set before close
-					//I have to num_clnt-- but if this override valid fd?
+
 				
 					printf("**********************Disconnect Client %d\n", dopoll.dp_fds[i].fd);
 					tmp_pfd.fd = dopoll.dp_fds[i].fd;	
 					tmp_pfd.events = POLLREMOVE; 
 					tmp_pfd.revents = 0;
 
-//			printf("i = %d, pollfd = %d, dopoll= %d\n", i, pollfd[i].fd, dopoll.dp_fds[i].fd);
-
+					for(j = 0; j < num_clnt; j++) 
+						if(dopoll.dp_fds[i].fd == clnt_sock[j]) break;
 										
 					if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
 						close(wfd);
 						free(pollfd);
 						error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 					}
+					close(dopoll.dp_fds[i].fd);
+					clnt_sock[j] = clnt_sock[--num_clnt]; //sort
 
-					printf("success write\n");
-					close(dopoll.dp_fds[i].fd); //OK
 				}
-				else{
+				else{//if i don't num_clnt--, will send msg multiply
 					for(j = 0; j < num_clnt; j++){
 						if(dopoll.dp_fds[i].fd != clnt_sock[j])
 							write(clnt_sock[j], message, str_len);
