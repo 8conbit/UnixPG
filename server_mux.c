@@ -16,7 +16,10 @@
 
 void error_handler(char *message);
 int create_serv_sock();
+int devpoll_add(int sock);
+int devpoll_close(int sock);
 
+int wfd;
 
 int main(int argc, char *argv[]){
 	int serv_sock;
@@ -24,17 +27,14 @@ int main(int argc, char *argv[]){
 	char message[BUF_SIZE];
 	char quit[] = "----QUIT\n";
 	int str_len;
-	struct sockaddr_in clnt_addr;
+	struct sockaddr_in clnt_addr[MAXCLNT-1];
 	socklen_t addr_size;
 
-	int i, j, num_ret, wfd = 0;
+	int i, j, num_ret;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
 	int num_clnt=0;
 	
-
-	struct pollfd tmp_pfd;
-
 	addr_size = sizeof(clnt_addr);
 
 	serv_sock = create_serv_sock();
@@ -45,34 +45,26 @@ int main(int argc, char *argv[]){
 	if((wfd = open("/dev/poll", O_RDWR)) < 0)
 		error_handler("/dev/poll error");
 
-
 	pollfd = (struct pollfd*)malloc(sizeof(struct pollfd)*MAXCLNT);	
 	if(pollfd == NULL){
 		close(wfd);
 		error_handler("malloc error");
 	}
-	
-	tmp_pfd.fd = serv_sock;
-	tmp_pfd.events = POLLIN;
-	tmp_pfd.revents =0;
-
-	
-	if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
-		close(wfd); 
-		free(pollfd);
-		error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
-	}//enroll socket fds to /dev/poll
-
 	dopoll.dp_timeout = -1;//wait serv listen event, clnt rcv event
 	dopoll.dp_fds = pollfd;
 	dopoll.dp_nfds = MAXCLNT;
+	
+	if(devpoll_add(serv_sock) == -1){
+		close(wfd); 
+		free(pollfd);
+		error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
+	}
 
 
 	while(1){  
 		printf("wait ioctl...\n");
 		num_ret = ioctl(wfd, DP_POLL, &dopoll);
 		printf("num_ret = %d, ", num_ret);
-
 		if(num_ret == -1){
 			close(wfd);
 			free(pollfd);
@@ -81,24 +73,20 @@ int main(int argc, char *argv[]){
 
 		for(i = 0; i < num_ret; i++){
 			if((dopoll.dp_fds[i].fd == serv_sock) && (num_clnt < MAXCLNT-1)){ //serv listen
-				clnt_sock[num_clnt]=accept(serv_sock, (struct sockaddr*)&clnt_addr, &addr_size);
+				clnt_sock[num_clnt]=accept(serv_sock, (struct sockaddr*)&clnt_addr[num_clnt], &addr_size);
 				if(clnt_sock[num_clnt]== -1){
    	       			close(clnt_sock[num_clnt]);
 					printf("accept error, but keep on\n");
 					continue;
 				}
 				
-				printf("[Accept] clnt sock : %d\n", clnt_sock[num_clnt]);
-				tmp_pfd.fd = clnt_sock[num_clnt]; 
-				tmp_pfd.events = POLLIN; //when disconnect, POLLREMOVE
-				tmp_pfd.revents = 0;
-				
-				if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
+				printf("[Accept] clnt sock : %d, addr : %s\n", clnt_sock[num_clnt], inet_ntoa(clnt_addr[num_clnt].sin_addr));
+
+				if(devpoll_add(clnt_sock[num_clnt++]) == -1){
 					close(wfd);
 					free(pollfd);
 					error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 				}
-				num_clnt++;
 				printf("num_clnt = %d\n", num_clnt);
 
 			}
@@ -108,26 +96,24 @@ int main(int argc, char *argv[]){
 				
 				if(str_len == 0){
 					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));	
-
-				
 					printf("**********************Disconnect Client %d\n", dopoll.dp_fds[i].fd);
-					tmp_pfd.fd = dopoll.dp_fds[i].fd;	
-					tmp_pfd.events = POLLREMOVE; 
-					tmp_pfd.revents = 0;
-
+					
 					for(j = 0; j < num_clnt; j++) 
 						if(dopoll.dp_fds[i].fd == clnt_sock[j]) break;
 										
-					if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd)){
+					if(devpoll_close(dopoll.dp_fds[i].fd) == -1){
 						close(wfd);
 						free(pollfd);
 						error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 					}
+
 					close(dopoll.dp_fds[i].fd);
-					clnt_sock[j] = clnt_sock[--num_clnt]; //sort
+					num_clnt--;
+					clnt_sock[j] = clnt_sock[num_clnt]; //sort
+					clnt_addr[j] = clnt_addr[num_clnt];
 
 				}
-				else{//if i don't num_clnt--, will send msg multiply
+				else{
 					for(j = 0; j < num_clnt; j++){
 						if(dopoll.dp_fds[i].fd != clnt_sock[j])
 							write(clnt_sock[j], message, str_len);
@@ -171,6 +157,38 @@ int create_serv_sock(){
 	
 	return serv_sock;
 }
+
+void devpoll_init(){
+
+}
+
+int devpoll_add(int sock){
+	struct pollfd tmp_pfd;
+
+	tmp_pfd.fd = sock;
+	tmp_pfd.events = POLLIN;
+	tmp_pfd.revents =0;
+	
+	if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd))
+		return -1;
+	else
+		return 0;
+}
+
+
+int devpoll_close(int sock){
+	struct pollfd tmp_pfd;
+
+	tmp_pfd.fd = sock;
+	tmp_pfd.events = POLLREMOVE;
+	tmp_pfd.revents =0;
+
+	if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd))
+		return -1;
+	else
+		return 0;
+}
+
 
 void error_handler(char *message){
 	fputs(message, stderr);
