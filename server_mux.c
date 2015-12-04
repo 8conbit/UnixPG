@@ -16,6 +16,7 @@
 
 void error_handler(char *message);
 int create_serv_sock();
+int devpoll_init(struct dvpoll* ppoll);
 int devpoll_add(int sock);
 int devpoll_close(int sock);
 
@@ -45,21 +46,16 @@ int main(int argc, char *argv[]){
 	if((wfd = open("/dev/poll", O_RDWR)) < 0)
 		error_handler("/dev/poll error");
 
-	pollfd = (struct pollfd*)malloc(sizeof(struct pollfd)*MAXCLNT);	
-	if(pollfd == NULL){
+	if(devpoll_init(&dopoll) == -1){
 		close(wfd);
-		error_handler("malloc error");
+		error_handler("devpoll_init malloc error");
 	}
-	dopoll.dp_timeout = -1;//wait serv listen event, clnt rcv event
-	dopoll.dp_fds = pollfd;
-	dopoll.dp_nfds = MAXCLNT;
-	
+
 	if(devpoll_add(serv_sock) == -1){
 		close(wfd); 
 		free(pollfd);
 		error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
 	}
-
 
 	while(1){  
 		printf("wait ioctl...\n");
@@ -85,7 +81,7 @@ int main(int argc, char *argv[]){
 				if(devpoll_add(clnt_sock[num_clnt++]) == -1){
 					close(wfd);
 					free(pollfd);
-					error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
+					error_handler("write pollfd to wfd error");
 				}
 				printf("num_clnt = %d\n", num_clnt);
 
@@ -104,16 +100,15 @@ int main(int argc, char *argv[]){
 					if(devpoll_close(dopoll.dp_fds[i].fd) == -1){
 						close(wfd);
 						free(pollfd);
-						error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
+						error_handler("write pollfd to wfd error");
 					}
 
-					close(dopoll.dp_fds[i].fd);
 					num_clnt--;
 					clnt_sock[j] = clnt_sock[num_clnt]; //sort
 					clnt_addr[j] = clnt_addr[num_clnt];
 
 				}
-				else{
+				else{ // send msg
 					for(j = 0; j < num_clnt; j++){
 						if(dopoll.dp_fds[i].fd != clnt_sock[j])
 							write(clnt_sock[j], message, str_len);
@@ -158,9 +153,21 @@ int create_serv_sock(){
 	return serv_sock;
 }
 
-void devpoll_init(){
+int devpoll_init(struct dvpoll *ppoll){
+	struct pollfd* pollfd;
+	pollfd = (struct pollfd*)malloc(sizeof(struct pollfd)*MAXCLNT);	
+	if(pollfd == NULL){
+		return -1;
+	}
+
+	ppoll->dp_timeout = -1;//wait serv listen event, clnt rcv event
+	ppoll->dp_fds = pollfd;
+	ppoll->dp_nfds = MAXCLNT;
+
+	return 0;
 
 }
+
 
 int devpoll_add(int sock){
 	struct pollfd tmp_pfd;
@@ -173,6 +180,7 @@ int devpoll_add(int sock){
 		return -1;
 	else
 		return 0;
+	
 }
 
 
@@ -185,8 +193,10 @@ int devpoll_close(int sock){
 
 	if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd))
 		return -1;
-	else
+	else{
 		return 0;
+		close(sock);
+	}
 }
 
 
