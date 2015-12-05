@@ -42,7 +42,6 @@ int main(int argc, char *argv[]){
 	if(serv_sock == -1 )
 		error_handler("socket() error");
 
-
 	if((wfd = open("/dev/poll", O_RDWR)) < 0)
 		error_handler("/dev/poll error");
 
@@ -194,8 +193,8 @@ int devpoll_close(int sock){
 	if(write(wfd, &tmp_pfd, sizeof(struct pollfd)) != sizeof(struct pollfd))
 		return -1;
 	else{
-		return 0;
 		close(sock);
+		return 0;
 	}
 }
 
