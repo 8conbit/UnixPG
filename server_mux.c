@@ -31,16 +31,17 @@ int main(int argc, char *argv[]){
 	struct sockaddr_in clnt_addr[MAXCLNT-1];
 	char *clnt_alias[MAXCLNT-1];
 	socklen_t addr_size;
+	FILE *fp;
 
-	int i, j, k, num_ret;
+	int i, j, k, num_ret, tfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
 	int num_clnt=0;
 	char temp[3+ASIZE+1]; // 3 10 1
 	
 	char quit[] = "----QUIT\n";
-	char dup[] = "/dup";
-	char okmsg[] = "/ok";
+	char dup[] = "/dp\n";
+	char okmsg[] = "/ok\n";
 	char list[] = "/l ";
 	char d_alias[] = "/da ";
 	char a_alias[] = "/aa ";
@@ -101,8 +102,6 @@ int main(int argc, char *argv[]){
 			else{ // clnt rcv event
 				printf("[Recieve]----- i = [%d]\n", i);
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
-				printf("%s\n", message);
-				
 				if(str_len == 0){
 					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));	
 					printf("**********************Disconnect Client %d\n", dopoll.dp_fds[i].fd);
@@ -123,31 +122,34 @@ int main(int argc, char *argv[]){
 					//close msg send. rest clnt
 				}
 				else if(message[0] == '/'){
-					printf("msg[0] = /\n");
+					message[str_len] = '\0';
+					printf("msg = %s\n", message);
 					switch(message[1]){
 						case 'a' :
-							printf("msg[1] = a\n");
-							for(k = 0; k < num_clnt-1; k++)//alias is being used
-								if(!strcmp(&message[3], clnt_alias[k])){
-									printf("alias = %s\n is dup", &message[3]);
+							for(j = 0; j < num_clnt-1; j++)//alias is being used
+								if(!strcmp(&message[3], clnt_alias[j])){
+									printf("alias = %s is dup\n", &message[3]);
 									write(dopoll.dp_fds[i].fd, dup, sizeof(dup));
 									break;
 								}
-							if((k+1) == num_clnt){//accept alias
-								printf("k == num_clnt && send ok\n");
+							if((j+1) == num_clnt){//accept alias
 								write(dopoll.dp_fds[i].fd, okmsg, sizeof(okmsg));	
+								fp = fdopen(dopoll.dp_fds[i].fd, "w");	
+								fflush(fp);
 								//client list send 
-								for(j = 0; j < num_clnt; j++) 
-									if(dopoll.dp_fds[i].fd == clnt_sock[j]){
-										strncpy(clnt_alias[j], &message[3], sizeof(ASIZE));
+								for(k = 0; k < num_clnt; k++) 
+									if(dopoll.dp_fds[i].fd == clnt_sock[k]){
+								strncpy(clnt_alias[k], &message[3], sizeof(char)*(str_len-3));
+										printf("find clnt sock %d , dopoll = %d , alias=%s\n", clnt_sock[k], dopoll.dp_fds[k].fd, clnt_alias[k]);
 										break;
 									}
-								for(j = 0; j < num_clnt; j++){//send all aliasj
+								tfd = k;
+								for(k = 0; k < num_clnt; k++){//send all aliasj
 									strcpy(temp, list);
-									strncat(temp, clnt_alias[j], sizeof(char)*ASIZE);
-									write(clnt_sock[j], temp, sizeof(temp));
+									strncat(temp, clnt_alias[k], sizeof(char)*ASIZE);
+									write(clnt_sock[tfd], temp, sizeof(temp));
 								}
-								printf("alias is add %s, clnt %d\n", clnt_alias[j], clnt_sock[j]);
+								printf("alias is add %s, clnt %d, tfd(th) = %d\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
 							}
 							break;
 						case 'r' :
