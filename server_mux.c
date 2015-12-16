@@ -13,7 +13,7 @@
 #define BUF_SIZE 1024
 #define MAXCLNT 255 
 #define PORT 9797
-#define ASIZE 10
+#define ASIZE 8 
 
 void error_handler(char *message);
 int create_serv_sock();
@@ -31,23 +31,22 @@ int main(int argc, char *argv[]){
 	struct sockaddr_in clnt_addr[MAXCLNT-1];
 	char *clnt_alias[MAXCLNT-1];
 	socklen_t addr_size;
-	FILE *fp;
 
 	int i, j, k, num_ret, tfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
 	int num_clnt=0;
-	char temp[3+ASIZE+1]; // 3 10 1
 	
 	char quit[] = "----QUIT\n";
 	char dup[] = "/dp\n";
 	char okmsg[] = "/ok\n";
-	char list[] = "/l ";
+	char list[4+(ASIZE*MAXCLNT)+1] = "/li "; // /li + alias size*num of clnt + NULL;
 	char d_alias[] = "/da ";
 	char a_alias[] = "/aa ";
+	char temp[ASIZE];
 
 	for(i = 0; i < MAXCLNT -1; i++){
-		clnt_alias[i] = (char*)calloc(3+ASIZE+1, sizeof(char));
+		clnt_alias[i] = (char*)calloc(ASIZE+1, sizeof(char)); //alias + ' '
 	}
 
 	addr_size = sizeof(clnt_addr);
@@ -100,11 +99,12 @@ int main(int argc, char *argv[]){
 
 			}
 			else{ // clnt rcv event
-				printf("[Recieve]----- i = [%d]\n", i);
+				printf("[Recieve]-- i = [%d]\n", i);
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
+				printf("msg = %s\n", message);
 				if(str_len == 0){
 					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));	
-					printf("**********************Disconnect Client %d\n", dopoll.dp_fds[i].fd);
+					printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
 					
 					for(j = 0; j < num_clnt; j++) 
 						if(dopoll.dp_fds[i].fd == clnt_sock[j]) break;
@@ -121,11 +121,14 @@ int main(int argc, char *argv[]){
 					clnt_alias[j] = clnt_alias[num_clnt];
 					//close msg send. rest clnt
 				}
-				else if(message[0] == '/'){
-					message[str_len] = '\0';
-					printf("msg = %s\n", message);
+				else{
+					message[str_len] = '\0'; // if need location change?
+					for(k = 0; k < num_clnt; k++) 
+						if(dopoll.dp_fds[i].fd == clnt_sock[k])
+							break;
+					tfd =k; //clnt[tfd] is event clnt
 					switch(message[1]){
-						case 'a' :
+						case 'a' : //not yet add alias => num_clnt-1
 							for(j = 0; j < num_clnt-1; j++)//alias is being used
 								if(!strcmp(&message[3], clnt_alias[j])){
 									printf("alias = %s is dup\n", &message[3]);
@@ -134,38 +137,47 @@ int main(int argc, char *argv[]){
 								}
 							if((j+1) == num_clnt){//accept alias
 								write(dopoll.dp_fds[i].fd, okmsg, sizeof(okmsg));	
-								fp = fdopen(dopoll.dp_fds[i].fd, "w");	
-								fflush(fp);
-								//client list send 
-								for(k = 0; k < num_clnt; k++) 
-									if(dopoll.dp_fds[i].fd == clnt_sock[k]){
-								strncpy(clnt_alias[k], &message[3], sizeof(char)*(str_len-3));
-										printf("find clnt sock %d , dopoll = %d , alias=%s\n", clnt_sock[k], dopoll.dp_fds[k].fd, clnt_alias[k]);
-										break;
-									}
-								tfd = k;
-								for(k = 0; k < num_clnt; k++){//send all aliasj
-									strcpy(temp, list);
-									strncat(temp, clnt_alias[k], sizeof(char)*ASIZE);
-									write(clnt_sock[tfd], temp, sizeof(temp));
+
+								//client alias list send  to all
+								for(k = 0; k < num_clnt-1; k++){//not yet add alias > num_clnt-1
+									strncat(list, clnt_alias[k], sizeof(clnt_alias[k]));
+									strncat(list, " ", sizeof(char));
 								}
-								printf("alias is add %s, clnt %d, tfd(th) = %d\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
+								strncat(list, "testbo1", sizeof(char)*8);
+								strncat(list, " ", sizeof(char));
+								strncat(list, "testbo2", sizeof(char)*8);
+								strncat(list, " ", sizeof(char));
+								list[strlen(list)-1] = '\n';
+								write(dopoll.dp_fds[i].fd, list, sizeof(list));	
+								printf("send list = %s-----LINE\n\n", list);
+								list[4] = '\0';
+
+								strncpy(clnt_alias[tfd], &message[3], sizeof(char)*(str_len-3));
+
+								printf("alias is add %s, clnt %d, tfd(th) = %d\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
 							}
 							break;
-						case 'r' :
-							//rrr
+						case 'w' : //1:1 chat
+							j = 0;
+							while(message[3+j] != ' '){ //find alias
+								temp[j] = message[3+j];	
+								j++;
+							}
+							temp[j] = '\0';	
+							j = 0;
+							while(!strcmp(temp, clnt_alias[j++]));
+							printf("--w--sendto temp = %s(alias) clnt[%d]\n", temp, j);
+							write(clnt_sock[j], message, str_len);//j is rcv clnt sequence	
+							printf("\n\n");
 							break;
-						default :
-							//send don't match sign
+						case 'c' :
+							for(j = 0; j < num_clnt; j++){
+								if(dopoll.dp_fds[i].fd != clnt_sock[j])
+									write(clnt_sock[j], message, str_len);
+							}
 							break;
 					}
 				}	
-				else{ // send msg
-					for(j = 0; j < num_clnt; j++){
-						if(dopoll.dp_fds[i].fd != clnt_sock[j])
-							write(clnt_sock[j], message, str_len);
-					}
-				}
 			}
 		}	
 	}
