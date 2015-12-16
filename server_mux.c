@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/devpoll.h>
 #include <sys/poll.h>
+#include <openssl/aes.h>
 
 
 #define BUF_SIZE 1024
@@ -35,7 +36,8 @@ int main(int argc, char *argv[]){
 	int i, j, k, num_ret, tfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
-	int num_clnt=0;
+	int num_clnt=0;// num_clnt_sock
+	int num_alias = 0;
 	
 	char quit[] = "----QUIT\n";
 	char dup[] = "/dp\n";
@@ -128,7 +130,7 @@ int main(int argc, char *argv[]){
 					d_alias[4] = '\0';
 
 					num_clnt--;
-					printf("close seq clnt_sock = %d, num_clnt = %d", clnt_sock[j], num_clnt);
+					num_alias--;
 					clnt_sock[j] = clnt_sock[num_clnt]; //sort
 					clnt_addr[j] = clnt_addr[num_clnt];
 					clnt_alias[j] = clnt_alias[num_clnt];
@@ -144,19 +146,21 @@ int main(int argc, char *argv[]){
 					tfd =k; //clnt[tfd] is event clnt
 					switch(message[1]){
 						case 'a' : //not yet add alias => num_clnt-1
-							for(j = 0; j < num_clnt-1; j++)//alias is being used
+							for(j = 0; j < num_alias; j++)//alias is being used
 								if(!strcmp(&message[3], clnt_alias[j])){
 									printf("alias = %s is dup\n", &message[3]);
 									write(dopoll.dp_fds[i].fd, dup, sizeof(dup));
 									break;
 								}
-							if((j+1) == num_clnt){//accept alias
+							if(j == num_alias){//accept alias
 								write(dopoll.dp_fds[i].fd, okmsg, sizeof(okmsg));	
 
-								//client alias list send  to all
-								for(k = 0; k < num_clnt-1; k++){//not yet add alias >num_clnt-1
+								//client alias list send
+								printf("num_alias = %d  ", num_alias);
+								for(k = 0; k < num_alias; k++){
 									strncat(list, clnt_alias[k], sizeof(clnt_alias[k]));
 									strncat(list, " ", sizeof(char));
+									printf("k = %d, %s\n", k, list);
 								}
 								strncat(list, "testbo1", sizeof(char)*8);
 								strncat(list, " ", sizeof(char));
@@ -181,6 +185,8 @@ int main(int argc, char *argv[]){
 								a_alias[4] = '\0';
 
 								printf("alias is add [%s], clnt %d, [%d]\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
+
+								num_alias++;
 							}
 							break;
 						case 'w' : //1:1 chat
