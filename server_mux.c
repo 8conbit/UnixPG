@@ -41,8 +41,8 @@ int main(int argc, char *argv[]){
 	char dup[] = "/dp\n";
 	char okmsg[] = "/ok\n";
 	char list[4+(ASIZE*MAXCLNT)+1] = "/li "; // /li + alias size*num of clnt + NULL;
-	char d_alias[] = "/da ";
-	char a_alias[] = "/aa ";
+	char d_alias[4+ASIZE+1] = "/da ";
+	char a_alias[4+ASIZE+1] = "/aa ";
 	char temp[ASIZE];
 
 	for(i = 0; i < MAXCLNT -1; i++){
@@ -115,11 +115,25 @@ int main(int argc, char *argv[]){
 						error_handler("write pollfd to wfd error");
 					}
 					
+					strncat(d_alias, clnt_alias[j], sizeof(d_alias)-4);
+					strncat(d_alias, "\n", sizeof(char));
+					printf("d_alias = %s", d_alias);
+
+					for(j = 0; j < num_clnt; j++){
+						if(dopoll.dp_fds[i].fd != clnt_sock[j]){
+							write(clnt_sock[j], d_alias, sizeof(d_alias));
+						}
+					}
+
+					d_alias[4] = '\0';
+
 					num_clnt--;
+					printf("close seq clnt_sock = %d, num_clnt = %d", clnt_sock[j], num_clnt);
 					clnt_sock[j] = clnt_sock[num_clnt]; //sort
 					clnt_addr[j] = clnt_addr[num_clnt];
 					clnt_alias[j] = clnt_alias[num_clnt];
 					//close msg send. rest clnt
+
 				}
 				else{
 					message[str_len] = '\0'; // if need location change?
@@ -140,7 +154,7 @@ int main(int argc, char *argv[]){
 								write(dopoll.dp_fds[i].fd, okmsg, sizeof(okmsg));	
 
 								//client alias list send  to all
-								for(k = 0; k < num_clnt-1; k++){//not yet add alias > num_clnt-1
+								for(k = 0; k < num_clnt-1; k++){//not yet add alias >num_clnt-1
 									strncat(list, clnt_alias[k], sizeof(clnt_alias[k]));
 									strncat(list, " ", sizeof(char));
 								}
@@ -152,10 +166,21 @@ int main(int argc, char *argv[]){
 								write(dopoll.dp_fds[i].fd, list, sizeof(list));	
 								printf("numclnt = %d, send list = %s-----LINE\n\n", num_clnt, list);
 								list[4] = '\0';
+								strncpy(clnt_alias[tfd], &message[3], sizeof(clnt_alias[tfd]));
 
-								strncpy(clnt_alias[tfd], &message[3], sizeof(char)*(str_len-3));
+								strncat(a_alias, clnt_alias[tfd], sizeof(a_alias)-4);
+								strncat(a_alias, "\n", sizeof(char));
+								printf("a_alias = %s", a_alias);
 
-								printf("alias is add %s, clnt %d, [%d]\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
+								for(j = 0; j < num_clnt; j++){
+									if(dopoll.dp_fds[i].fd != clnt_sock[j]){
+										write(clnt_sock[j], a_alias, sizeof(a_alias));
+									}
+								}
+
+								a_alias[4] = '\0';
+
+								printf("alias is add [%s], clnt %d, [%d]\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
 							}
 							break;
 						case 'w' : //1:1 chat
@@ -167,10 +192,6 @@ int main(int argc, char *argv[]){
 							temp[j] = '\0';	
 							j = 0;
 							while((strcmp(temp, clnt_alias[j]) && (j < num_clnt))){
-								if(j >= num_clnt){
-									printf("!!!!!!!!don't match j!!!!!");
-									break;
-								}
 								j++;
 							}
 							printf("temp = %s / alias[j] = %s\n", temp, clnt_alias[j]);
@@ -180,8 +201,9 @@ int main(int argc, char *argv[]){
 							break;
 						case 'c' :
 							for(j = 0; j < num_clnt; j++){
-								if(dopoll.dp_fds[i].fd != clnt_sock[j])
+								if(dopoll.dp_fds[i].fd != clnt_sock[j]){
 									write(clnt_sock[j], message, str_len);
+								}
 							}
 							break;
 					}
