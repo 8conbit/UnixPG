@@ -70,9 +70,8 @@ int main(int argc, char *argv[]){
 	}
 
 	while(1){  
-		printf("wait ioctl...\n");
+		printf("\nwait ioctl...\n");
 		num_ret = ioctl(wfd, DP_POLL, &dopoll);
-		printf("num_ret = %d, ", num_ret);
 		if(num_ret == -1){
 			close(wfd);
 			free(pollfd);
@@ -99,13 +98,14 @@ int main(int argc, char *argv[]){
 
 			}
 			else{ // clnt rcv event
-				printf("[Recieve]-- i = [%d]\n", i);
+		//		printf("[Recieve]-- i = [%d]\n", i);
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
-				printf("msg = %s\n", message);
 				if(str_len == 0){
 					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));	
 					printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
 					
+			//		while(dopoll.dp_fds[i].fd != clnt_sock[j++]);
+
 					for(j = 0; j < num_clnt; j++) 
 						if(dopoll.dp_fds[i].fd == clnt_sock[j]) break;
 										
@@ -114,7 +114,7 @@ int main(int argc, char *argv[]){
 						free(pollfd);
 						error_handler("write pollfd to wfd error");
 					}
-
+					
 					num_clnt--;
 					clnt_sock[j] = clnt_sock[num_clnt]; //sort
 					clnt_addr[j] = clnt_addr[num_clnt];
@@ -123,6 +123,7 @@ int main(int argc, char *argv[]){
 				}
 				else{
 					message[str_len] = '\0'; // if need location change?
+					printf("msg = %s\n", message);
 					for(k = 0; k < num_clnt; k++) 
 						if(dopoll.dp_fds[i].fd == clnt_sock[k])
 							break;
@@ -149,12 +150,12 @@ int main(int argc, char *argv[]){
 								strncat(list, " ", sizeof(char));
 								list[strlen(list)-1] = '\n';
 								write(dopoll.dp_fds[i].fd, list, sizeof(list));	
-								printf("send list = %s-----LINE\n\n", list);
+								printf("numclnt = %d, send list = %s-----LINE\n\n", num_clnt, list);
 								list[4] = '\0';
 
 								strncpy(clnt_alias[tfd], &message[3], sizeof(char)*(str_len-3));
 
-								printf("alias is add %s, clnt %d, tfd(th) = %d\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
+								printf("alias is add %s, clnt %d, [%d]\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
 							}
 							break;
 						case 'w' : //1:1 chat
@@ -165,8 +166,15 @@ int main(int argc, char *argv[]){
 							}
 							temp[j] = '\0';	
 							j = 0;
-							while(!strcmp(temp, clnt_alias[j++]));
-							printf("--w--sendto temp = %s(alias) clnt[%d]\n", temp, j);
+							while((strcmp(temp, clnt_alias[j]) && (j < num_clnt))){
+								if(j >= num_clnt){
+									printf("!!!!!!!!don't match j!!!!!");
+									break;
+								}
+								j++;
+							}
+							printf("temp = %s / alias[j] = %s\n", temp, clnt_alias[j]);
+							printf("--w--sendto temp = %s clnt[j=%d] = %s\n", temp, j, clnt_alias[j]);
 							write(clnt_sock[j], message, str_len);//j is rcv clnt sequence	
 							printf("\n\n");
 							break;
