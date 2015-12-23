@@ -1,7 +1,6 @@
 
 #include "8condevpoll.h"
 
-#define MAXCLNT 255
 
 int devpoll_init(struct dvpoll *ppoll) {
 	struct pollfd* pollfd;
