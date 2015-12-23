@@ -15,7 +15,6 @@
 void error_handler(char *message);
 int create_serv_sock();
 
-int wfd;
 
 int main(int argc, char *argv[]) {
 	int serv_sock;
@@ -27,8 +26,10 @@ int main(int argc, char *argv[]) {
 	socklen_t addr_size;
 
 	int i, j, k, num_ret, tfd;
+	int wfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
+	
 	int num_clnt = 0;// num_clnt_sock
 	int num_alias = 0;
 
@@ -58,7 +59,7 @@ int main(int argc, char *argv[]) {
 		error_handler("devpoll_init malloc error");
 	}
 
-	if (devpoll_add(serv_sock) == -1) {
+	if (devpoll_add(serv_sock, wfd) == -1) {
 		close(wfd);
 		free(pollfd);
 		error_handler("write pollfd to wfd(file descriptor of /dev/poll) error");
@@ -84,7 +85,7 @@ int main(int argc, char *argv[]) {
 
 				printf("[Accept] clnt sock : %d, addr : %s\n", clnt_sock[num_clnt], inet_ntoa(clnt_addr[num_clnt].sin_addr));
 
-				if (devpoll_add(clnt_sock[num_clnt++]) == -1) {
+				if (devpoll_add(clnt_sock[num_clnt++], wfd) == -1) {
 					close(wfd);
 					free(pollfd);
 					error_handler("write pollfd to wfd error");
@@ -104,7 +105,7 @@ int main(int argc, char *argv[]) {
 					for (j = 0; j < num_clnt; j++)
 						if (dopoll.dp_fds[i].fd == clnt_sock[j]) break;
 
-					if (devpoll_close(dopoll.dp_fds[i].fd) == -1) {
+					if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1) {
 						close(wfd);
 						free(pollfd);
 						error_handler("write pollfd to wfd error");

@@ -1,6 +1,4 @@
 
-#include <sys/devpoll.h>
-#include <sys/poll.h>
 #include "8condevpoll.h"
 
 #define MAXCLNT 255
@@ -21,7 +19,7 @@ int devpoll_init(struct dvpoll *ppoll) {
 }
 
 
-int devpoll_add(int sock) {
+int devpoll_add(int sock, int wfd) {
 	struct pollfd tmp_pfd;
 
 	tmp_pfd.fd = sock;
@@ -36,7 +34,7 @@ int devpoll_add(int sock) {
 }
 
 
-int devpoll_close(int sock) {
+int devpoll_close(int sock, int wfd) {
 	struct pollfd tmp_pfd;
 
 	tmp_pfd.fd = sock;
