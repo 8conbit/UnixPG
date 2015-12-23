@@ -8,7 +8,6 @@
 #include <fcntl.h>
 #include <sys/devpoll.h>
 #include <sys/poll.h>
-#include <openssl/aes.h>
 
 
 #define BUF_SIZE 1024
