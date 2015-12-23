@@ -1,3 +1,8 @@
+/*
+AES block size is 128 ( fixed )
+division, thread, AES
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +80,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		for (i = 0; i < num_ret; i++) {
-			if ((dopoll.dp_fds[i].fd == serv_sock) && (num_clnt < MAXCLNT - 1)) { //serv listen
+			if ((dopoll.dp_fds[i].fd == serv_sock) && (num_clnt < MAXCLNT - 1)) { //clnt request connect
 				clnt_sock[num_clnt] = accept(serv_sock, (struct sockaddr*)&clnt_addr[num_clnt], &addr_size);
 				if (clnt_sock[num_clnt] == -1) {
 					close(clnt_sock[num_clnt]);
