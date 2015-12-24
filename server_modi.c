@@ -20,27 +20,25 @@ char []은 그냥 배열사이즈 잘나옴
 #define PORT 9797
 #define ASIZE 8 
 
-void error_handler(char *message, int fd, struct pollfd* pollfd);
+void error_handler(char *message);
 int create_serv_sock();
+
+int clnt_sock[MAXCLNT - 1];
+struct sockaddr_in clnt_addr[MAXCLNT - 1];
+char *clnt_alias[MAXCLNT - 1];
+static int num_clnt = 0;// num_clnt_sock
+static int num_alias = 0;
 
 
 int main(int argc, char *argv[]) {
-	//socket
 	int serv_sock;
-	int clnt_sock[MAXCLNT - 1];
 	char message[BUF_SIZE];
 	int str_len;
-	struct sockaddr_in clnt_addr[MAXCLNT - 1];
-	char *clnt_alias[MAXCLNT - 1];
 	socklen_t addr_size;
 	//devpoll
 	int i, j, k, num_ret, efd, wfd;
-	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
-
-	int num_clnt = 0;// num_clnt_sock
-	int num_alias = 0;
-
+	
 	char dup[] = "/dp\n";
 	char okmsg[] = "/ok\n";
 	char list[4 + ((ASIZE+1)*MAXCLNT)] = "/li "; // /li + (ASIZE+" ")*num of clnt..... last " " is replaced NULL;
@@ -56,23 +54,27 @@ int main(int argc, char *argv[]) {
 
 	serv_sock = create_serv_sock();
 	if (serv_sock == -1)
-		error_handler("socket() error", NULL, NULL);
+		error_handler("socket() error");
 
-	if ((wfd = open("/dev/poll", O_RDWR)) < 0)
-		error_handler("/dev/poll error", NULL, NULL);
+	if ((wfd = open("/dev/poll", O_RDWR)) < 0) {
+		close(serv_sock); error_handler("/dev/poll error");
+	}
 
-	if (devpoll_init(&dopoll) == -1)
-		error_handler("devpoll_init malloc error", wfd, NULL);
+	if (devpoll_init(&dopoll) == -1){
+		close(serv_sock);  close(wfd); error_handler("devpoll_init malloc error");
+	}
 
-	if (devpoll_add(serv_sock, wfd) == -1) 
-		error_handler("write pollfd to wfd(file descriptor of /dev/poll) error", wfd, pollfd);
+	if (devpoll_add(serv_sock, wfd) == -1) {
+		close(serv_sock);  close(wfd); free(dopoll.dp_fds); error_handler("write pollfd to wfd error");
+	}
 
 
 	while (1) {
 		printf("\nwait ioctl...\n");
 		num_ret = ioctl(wfd, DP_POLL, &dopoll);		//block.
-		if (num_ret == -1) 
-			error_handler("ioctl DP_POLL failed", wfd, pollfd);
+		if (num_ret == -1) {
+			close(serv_sock); close(wfd); free(dopoll.dp_fds); error_handler("ioctl DP_POLL failed");
+		}
 		//////스레드를 2개, event 감지 시 connect accept이면 1번 스레드, rcv면 2번 스레드로? close는?
 		//어차피 main도 단일 스레드니까 main에서 rcv하는게 낫겠다. 스레드하나 만들어서 connect하고.. 뮤텍스를 써야겠다.
 		//근데 굳이 스레드 써야하는 이유는 뭐지? 어차피 lock 걸릴텐데 lock걸린동안 다른 스레드가 아예 작업을 못하면, 괜히 나누는거 아닌가?
@@ -87,24 +89,25 @@ int main(int argc, char *argv[]) {
 
 				printf("[Accept] clnt sock : %d, addr : %s\n", clnt_sock[num_clnt], inet_ntoa(clnt_addr[num_clnt].sin_addr));
 
-				if (devpoll_add(clnt_sock[num_clnt++], wfd) == -1) 
-					error_handler("write pollfd to wfd error", wfd, pollfd);
+				if (devpoll_add(clnt_sock[num_clnt++], wfd) == -1) {
+					close(serv_sock); close(wfd); free(dopoll.dp_fds); error_handler("write pollfd to wfd error");
+				}
 				
 				printf("num_clnt = %d\n", num_clnt);
 
 			}
-			else { // clnt rcv event  /////////여기를 잘라야해. 여기 윗부분은 딱히..
+			else { // clnt rcv event
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
 				for (j = 0; j < num_clnt; j++)
 					if (dopoll.dp_fds[i].fd == clnt_sock[j]) break;
 				efd = j; //clnt[efd] is event clnt ( == dopoll.dp_fds[i].fd)
-				if (str_len == 0) {
+
+				if (str_len == 0) {// event1,  close
 					printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
 
-
-					if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1) 
-						error_handler("write pollfd to wfd error", wfd, pollfd);
-					
+					if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1) {
+						close(serv_sock); close(wfd); free(dopoll.dp_fds); error_handler("write pollfd to wfd error");
+					}
 					strncat(d_alias, clnt_alias[efd], ASIZE);
 					strncat(d_alias, "\n", sizeof(char));
 					printf("d_alias = %s", d_alias);
@@ -114,7 +117,6 @@ int main(int argc, char *argv[]) {
 							write(clnt_sock[j], d_alias, sizeof(d_alias));
 						}
 					}
-
 					d_alias[4] = '\0';
 
 					num_clnt--;
@@ -122,9 +124,8 @@ int main(int argc, char *argv[]) {
 					clnt_sock[efd] = clnt_sock[num_clnt]; //sort
 					clnt_addr[efd] = clnt_addr[num_clnt];
 					clnt_alias[efd] = clnt_alias[num_clnt];
-					//close msg send. reset clnt
 				}
-				else {
+				else {// event2, rcv msg
 					message[str_len] = '\0'; // if need location change?
 					printf("msg = %s\n", message);
  
@@ -154,8 +155,7 @@ int main(int argc, char *argv[]) {
 							printf("numclnt = %d, send list = %s-----LINE\n\n", num_clnt, list);
 							list[4] = '\0';
 							strncpy(clnt_alias[efd], &message[3], ASIZE); // NULL is added auto(calloc).
-							printf("str_len= %d\n", str_len);
-							printf("clnt_alias = %s, [%d]\n", clnt_alias[efd], clnt_alias[efd][str_len-3]);
+
 							strncat(a_alias, clnt_alias[efd], ASIZE);
 							strncat(a_alias, "\n", sizeof(char));
 
@@ -201,9 +201,39 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	close(wfd);
-	free(pollfd);
+	free(dopoll.dp_fds);
 	close(serv_sock);
+	for (i = 0; i < MAXCLNT - 1; i++) {
+		free(clnt_alias[i])
+	}
+	for (i = 0; i < num_clnt; i++) {
+		close(clnt_sock[i])
+	}
 	return 0;
+}
+
+int close_sock(int efd) {
+	printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
+
+	if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1)
+		error_handler("write pollfd to wfd error");
+
+	strncat(d_alias, clnt_alias[efd], ASIZE);
+	strncat(d_alias, "\n", sizeof(char));
+	printf("d_alias = %s", d_alias);
+
+	for (j = 0; j < num_clnt; j++) {	//d_alias advertisement
+		if (dopoll.dp_fds[i].fd != clnt_sock[j]) {
+			write(clnt_sock[j], d_alias, sizeof(d_alias));
+		}
+	}
+	d_alias[4] = '\0';
+
+	num_clnt--;
+	num_alias--;
+	clnt_sock[efd] = clnt_sock[num_clnt]; //sort
+	clnt_addr[efd] = clnt_addr[num_clnt];
+	clnt_alias[efd] = clnt_alias[num_clnt];
 }
 
 int create_serv_sock() {
@@ -212,10 +242,9 @@ int create_serv_sock() {
 	socklen_t optlen;
 	int option;
 
-
 	serv_sock = socket(PF_INET, SOCK_STREAM, 0);
 	if (serv_sock == -1)
-		error_handler("socket() error", NULL, NULL);
+		error_handler("socket() error");
 
 	optlen = sizeof(option);
 	option = 1;
@@ -228,20 +257,25 @@ int create_serv_sock() {
 	serv_addr.sin_port = htons(PORT); //port to network endian
 
 	if (bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
-		error_handler("bind() error", NULL, NULL);
+		error_handler("bind() error");
 
 	if (listen(serv_sock, 5) == -1)//keep on listening
-		error_handler("listen() error", NULL, NULL);
+		error_handler("listen() error");
 
 	return serv_sock;
 }
 
 
-void error_handler(char *message, int fd, struct pollfd* pollfd) {
-	if (fd != NULL)
-		close(fd);
-	if (pollfd != NULL)
-		free(pollfd);
+void error_handler(char *message) {
+	int i;
+
+	for (i = 0; i < MAXCLNT - 1; i++) {
+		free(clnt_alias[i])
+	}
+	for (i = 0; i < num_clnt; i++) {
+		close(clnt_sock[i])
+	}
+
 	fputs(message, stderr);
 	fputc('\n', stderr);
 	exit(1);
