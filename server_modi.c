@@ -11,7 +11,6 @@ division, thread, AES
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include "8condevpoll.h"
 
 #define BUF_SIZE 1024
@@ -35,8 +34,6 @@ int main(int argc, char *argv[]) {
 	int i, j, k, num_ret, tfd, wfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
-	//thread
-	pthread_t accept;
 
 	int num_clnt = 0;// num_clnt_sock
 	int num_alias = 0;
