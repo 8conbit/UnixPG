@@ -1,6 +1,7 @@
 /*
 AES block size is 128 ( fixed )
-division, thread, AES
+division,  AES
+RSA, thread는 나중. clnt 끝난다음에.
 */
 
 #include <stdio.h>
@@ -31,19 +32,18 @@ int main(int argc, char *argv[]) {
 	char *clnt_alias[MAXCLNT - 1];
 	socklen_t addr_size;
 	//devpoll
-	int i, j, k, num_ret, tfd, wfd;
+	int i, j, k, num_ret, efd, wfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
 
 	int num_clnt = 0;// num_clnt_sock
 	int num_alias = 0;
 
-	char quit[] = "----QUIT\n";
 	char dup[] = "/dp\n";
 	char okmsg[] = "/ok\n";
-	char list[4 + (ASIZE*MAXCLNT) + 1] = "/li "; // /li + alias size*num of clnt + NULL;
-	char d_alias[4 + ASIZE + 1] = "/da ";
-	char a_alias[4 + ASIZE + 1] = "/aa ";
+	char list[4 + ((ASIZE+1)*MAXCLNT)] = "/li "; // /li + (ASIZE+" ")*num of clnt..... last " " is replaced NULL;
+	char d_alias[4 + ASIZE + 1 + 1] = "/da ";	//da + ASIZE + \n + NULL
+	char a_alias[4 + ASIZE + 1 + 1] = "/aa ";
 	char temp[ASIZE];
 
 	for (i = 0; i < MAXCLNT - 1; i++) {
@@ -73,7 +73,8 @@ int main(int argc, char *argv[]) {
 			error_handler("ioctl DP_POLL failed", wfd, pollfd);
 		//////스레드를 2개, event 감지 시 connect accept이면 1번 스레드, rcv면 2번 스레드로? close는?
 		//어차피 main도 단일 스레드니까 main에서 rcv하는게 낫겠다. 스레드하나 만들어서 connect하고.. 뮤텍스를 써야겠다.
-		for (i = 0; i < num_ret; i++) {/////////여기를 잘라야해. 여기 윗부분은 딱히..
+		//근데 굳이 스레드 써야하는 이유는 뭐지? 어차피 lock 걸릴텐데 lock걸린동안 다른 스레드가 아예 작업을 못하면, 괜히 나누는거 아닌가?
+		for (i = 0; i < num_ret; i++) {
 			if ((dopoll.dp_fds[i].fd == serv_sock) && (num_clnt < MAXCLNT - 1)) { //clnt request connect
 				clnt_sock[num_clnt] = accept(serv_sock, (struct sockaddr*)&clnt_addr[num_clnt], &addr_size);
 				if (clnt_sock[num_clnt] == -1) {
@@ -90,22 +91,23 @@ int main(int argc, char *argv[]) {
 				printf("num_clnt = %d\n", num_clnt);
 
 			}
-			else { // clnt rcv event
+			else { // clnt rcv event  /////////여기를 잘라야해. 여기 윗부분은 딱히..
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
+				for (j = 0; j < num_clnt; j++)
+					if (dopoll.dp_fds[i].fd == clnt_sock[j]) break;
+				efd = j; //clnt[efd] is event clnt ( == dopoll.dp_fds[i].fd)
 				if (str_len == 0) {
 					printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
 
-					for (j = 0; j < num_clnt; j++)
-						if (dopoll.dp_fds[i].fd == clnt_sock[j]) break;
 
 					if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1) 
 						error_handler("write pollfd to wfd error", wfd, pollfd);
 					
-					strncat(d_alias, clnt_alias[j], sizeof(d_alias) - 4);
+					strncat(d_alias, clnt_alias[efd], sizeof(d_alias) - 5);
 					strncat(d_alias, "\n", sizeof(char));
 					printf("d_alias = %s", d_alias);
 
-					for (j = 0; j < num_clnt; j++) {
+					for (j = 0; j < num_clnt; j++) {	//d_alias advertisement
 						if (dopoll.dp_fds[i].fd != clnt_sock[j]) {
 							write(clnt_sock[j], d_alias, sizeof(d_alias));
 						}
@@ -115,18 +117,15 @@ int main(int argc, char *argv[]) {
 
 					num_clnt--;
 					num_alias--;
-					clnt_sock[j] = clnt_sock[num_clnt]; //sort
-					clnt_addr[j] = clnt_addr[num_clnt];
-					clnt_alias[j] = clnt_alias[num_clnt];
-					//close msg send. rest clnt
-
+					clnt_sock[efd] = clnt_sock[num_clnt]; //sort
+					clnt_addr[efd] = clnt_addr[num_clnt];
+					clnt_alias[efd] = clnt_alias[num_clnt];
+					//close msg send. reset clnt
 				}
 				else {
 					message[str_len] = '\0'; // if need location change?
 					printf("msg = %s\n", message);
-					for (k = 0; k < num_clnt; k++)
-						if (dopoll.dp_fds[i].fd == clnt_sock[k]) break;
-					tfd = k; //clnt[tfd] is event clnt
+ 
 					switch (message[1]) {
 					case 'a': //not yet add alias => num_clnt-1
 						for (j = 0; j < num_alias; j++)//alias is being used
@@ -135,6 +134,7 @@ int main(int argc, char *argv[]) {
 								write(dopoll.dp_fds[i].fd, dup, sizeof(dup));
 								break;
 							}
+
 						if (j == num_alias) {//accept alias
 							write(dopoll.dp_fds[i].fd, okmsg, sizeof(okmsg));
 
@@ -145,17 +145,15 @@ int main(int argc, char *argv[]) {
 								strncat(list, " ", sizeof(char));
 								printf("k = %d, %s\n", k, list);
 							}
-							strncat(list, "testbo1", sizeof(char) * 8);
-							strncat(list, " ", sizeof(char));
-							strncat(list, "testbo2", sizeof(char) * 8);
+							strncat(list, "testbot", sizeof(char) * 8);
 							strncat(list, " ", sizeof(char));
 							list[strlen(list) - 1] = '\n';
 							write(dopoll.dp_fds[i].fd, list, sizeof(list));
 							printf("numclnt = %d, send list = %s-----LINE\n\n", num_clnt, list);
 							list[4] = '\0';
-							strncpy(clnt_alias[tfd], &message[3], sizeof(clnt_alias[tfd]));
+							strncpy(clnt_alias[efd], &message[3], sizeof(clnt_alias[efd]));
 
-							strncat(a_alias, clnt_alias[tfd], sizeof(a_alias) - 4);
+							strncat(a_alias, clnt_alias[efd], sizeof(a_alias) - 4);
 							strncat(a_alias, "\n", sizeof(char));
 							printf("a_alias = %s", a_alias);
 
@@ -167,7 +165,7 @@ int main(int argc, char *argv[]) {
 
 							a_alias[4] = '\0';
 
-							printf("alias is add [%s], clnt %d, [%d]\n\n", clnt_alias[tfd], clnt_sock[tfd], tfd);
+							printf("alias is add [%s], clnt %d, [%d]\n\n", clnt_alias[efd], clnt_sock[efd], efd);
 
 							num_alias++;
 						}
