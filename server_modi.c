@@ -1,5 +1,5 @@
 /*
-AES block size is 128 ( fixed )
+AES block size is 128 ( fixed ) 16Byte... 16*64 = 1024
 division,  AES
 RSA, thread는 나중. clnt 끝난다음에.
 char *은 sizeof하면 포인터 사이즈나옴
@@ -42,7 +42,6 @@ int main(int argc, char *argv[]) {
 	char dup[] = "/dp\n";
 	char okmsg[] = "/ok\n";
 	char list[4 + ((ASIZE+1)*MAXCLNT)] = "/li "; // /li + (ASIZE+" ")*num of clnt..... last " " is replaced NULL;
-	char d_alias[4 + ASIZE + 1 + 1] = "/da ";	//da + ASIZE + \n + NULL
 	char a_alias[4 + ASIZE + 1 + 1] = "/aa ";
 	char temp[ASIZE+1];
 
@@ -86,13 +85,10 @@ int main(int argc, char *argv[]) {
 					printf("accept error, but keep on\n");
 					continue;
 				}
-
 				printf("[Accept] clnt sock : %d, addr : %s\n", clnt_sock[num_clnt], inet_ntoa(clnt_addr[num_clnt].sin_addr));
-
 				if (devpoll_add(clnt_sock[num_clnt++], wfd) == -1) {
 					close(serv_sock); close(wfd); free(dopoll.dp_fds); error_handler("write pollfd to wfd error");
 				}
-				
 				printf("num_clnt = %d\n", num_clnt);
 
 			}
@@ -103,27 +99,9 @@ int main(int argc, char *argv[]) {
 				efd = j; //clnt[efd] is event clnt ( == dopoll.dp_fds[i].fd)
 
 				if (str_len == 0) {// event1,  close
-					printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
-
-					if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1) {
+					if (close_sock(efd, wfd) == -1) {
 						close(serv_sock); close(wfd); free(dopoll.dp_fds); error_handler("write pollfd to wfd error");
 					}
-					strncat(d_alias, clnt_alias[efd], ASIZE);
-					strncat(d_alias, "\n", sizeof(char));
-					printf("d_alias = %s", d_alias);
-
-					for (j = 0; j < num_clnt; j++) {	//d_alias advertisement
-						if (dopoll.dp_fds[i].fd != clnt_sock[j]) {
-							write(clnt_sock[j], d_alias, sizeof(d_alias));
-						}
-					}
-					d_alias[4] = '\0';
-
-					num_clnt--;
-					num_alias--;
-					clnt_sock[efd] = clnt_sock[num_clnt]; //sort
-					clnt_addr[efd] = clnt_addr[num_clnt];
-					clnt_alias[efd] = clnt_alias[num_clnt];
 				}
 				else {// event2, rcv msg
 					message[str_len] = '\0'; // if need location change?
@@ -212,22 +190,24 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-int close_sock(int efd) {
-	printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
+int close_sock(int efd, int wfd) {
+	int i;
+	char d_alias[4 + ASIZE + 1 + 1] = "/da ";	//da + ASIZE + \n + NULL
 
-	if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1)
-		error_handler("write pollfd to wfd error");
+	printf("***********Disconnect Client %d\n", clnt_sock[efd]);
+
+	if (devpoll_close(clnt_sock[efd], wfd) == -1)
+		return -1;
 
 	strncat(d_alias, clnt_alias[efd], ASIZE);
 	strncat(d_alias, "\n", sizeof(char));
 	printf("d_alias = %s", d_alias);
 
-	for (j = 0; j < num_clnt; j++) {	//d_alias advertisement
-		if (dopoll.dp_fds[i].fd != clnt_sock[j]) {
-			write(clnt_sock[j], d_alias, sizeof(d_alias));
+	for (i = 0; i < num_clnt; i++) {	//d_alias advertisement
+		if (clnt_sock[efd] != clnt_sock[i]) {
+			write(clnt_sock[i], d_alias, sizeof(d_alias));
 		}
 	}
-	d_alias[4] = '\0';
 
 	num_clnt--;
 	num_alias--;
