@@ -154,7 +154,8 @@ int main(int argc, char *argv[]) {
 							printf("numclnt = %d, send list = %s-----LINE\n\n", num_clnt, list);
 							list[4] = '\0';
 							strncpy(clnt_alias[efd], &message[3], ASIZE); // NULL is added auto(calloc).
-							printf("%clnt_alias = %s, [%d]\n", clnt_alias[efd], clnt_alias[efd][str_len-4];
+							printf("str_len= %d\n", str_len);
+							printf("clnt_alias = %s, [%d]\n", clnt_alias[efd], clnt_alias[efd][str_len-3]);
 							strncat(a_alias, clnt_alias[efd], ASIZE);
 							strncat(a_alias, "\n", sizeof(char));
 
