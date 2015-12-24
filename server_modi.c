@@ -19,7 +19,7 @@ RSA, thread는 나중. clnt 끝난다음에. alias find hash도. 나중에.
 #define ASIZE 8 
 
 void error_handler(char *message);
-int create_serv_sock();
+void create_serv_sock();
 void close_sock(int efd);
 
 int find_alias(char *new_alias);//dup test -> send ok&send list -> add alias
@@ -43,9 +43,8 @@ int main(int argc, char *argv[]) {
 	int i, j, k, num_ret, efd;
 	char dup[] = "/dp\n";
 
-	for (i = 0; i < MAXCLNT - 1; i++) {
+	for (i = 0; i < MAXCLNT - 1; i++) 
 		clnt_alias[i] = (char*)calloc(ASIZE + 1, sizeof(char)); //alias + NULL
-	}
 
 	addr_size = sizeof(clnt_addr);
 
@@ -56,7 +55,6 @@ int main(int argc, char *argv[]) {
 
 	if (devpoll_init(&dopoll) == -1)
 		error_handler("devpoll_init malloc error");
-
 
 	if (devpoll_add(serv_sock, wfd) == -1)
 		error_handler("write pollfd to wfd error");
@@ -94,12 +92,11 @@ int main(int argc, char *argv[]) {
 				efd = j; //clnt[efd] is event clnt ( == dopoll.dp_fds[i].fd)
 
 				if (str_len == 0) {// event1,  close
-					close_sock(efd, wfd);
+					close_sock(efd);
 				}
 				else {// event2, rcv msg
 					message[str_len] = '\0';
 					printf("msg = %s\n", message);
-					printf("****@#@#@ str_len = %d, strlen(msg) = %d\n", str_len, strlen(message));
 					switch (message[1]) {
 					case 'a': //not yet add alias => num_clnt-1
 						if (find_alias(&message[3]) == 0) {
@@ -128,6 +125,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
+
 	close(wfd);
 	free(dopoll.dp_fds);
 	close(serv_sock);
@@ -137,6 +135,9 @@ int main(int argc, char *argv[]) {
 		close(clnt_sock[i]);
 	return 0;
 }
+
+
+
 
 void whisper(char *msg) {
 	int i = 0;
