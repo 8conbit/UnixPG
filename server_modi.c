@@ -2,6 +2,8 @@
 AES block size is 128 ( fixed )
 division,  AES
 RSA, thread는 나중. clnt 끝난다음에.
+char *은 sizeof하면 포인터 사이즈나옴
+char []은 그냥 배열사이즈 잘나옴
 */
 
 #include <stdio.h>
@@ -44,10 +46,10 @@ int main(int argc, char *argv[]) {
 	char list[4 + ((ASIZE+1)*MAXCLNT)] = "/li "; // /li + (ASIZE+" ")*num of clnt..... last " " is replaced NULL;
 	char d_alias[4 + ASIZE + 1 + 1] = "/da ";	//da + ASIZE + \n + NULL
 	char a_alias[4 + ASIZE + 1 + 1] = "/aa ";
-	char temp[ASIZE];
+	char temp[ASIZE+1];
 
 	for (i = 0; i < MAXCLNT - 1; i++) {
-		clnt_alias[i] = (char*)calloc(ASIZE + 1, sizeof(char)); //alias + ' '
+		clnt_alias[i] = (char*)calloc(ASIZE + 1, sizeof(char)); //alias + NULL
 	}
 
 	addr_size = sizeof(clnt_addr);
@@ -103,7 +105,7 @@ int main(int argc, char *argv[]) {
 					if (devpoll_close(dopoll.dp_fds[i].fd, wfd) == -1) 
 						error_handler("write pollfd to wfd error", wfd, pollfd);
 					
-					strncat(d_alias, clnt_alias[efd], sizeof(d_alias) - 5);
+					strncat(d_alias, clnt_alias[efd], ASIZE);
 					strncat(d_alias, "\n", sizeof(char));
 					printf("d_alias = %s", d_alias);
 
@@ -141,7 +143,7 @@ int main(int argc, char *argv[]) {
 							//client alias list send
 							printf("num_alias = %d  ", num_alias);
 							for (k = 0; k < num_alias; k++) {
-								strncat(list, clnt_alias[k], sizeof(clnt_alias[k]));
+								strncat(list, clnt_alias[k], ASIZE);
 								strncat(list, " ", sizeof(char));
 								printf("k = %d, %s\n", k, list);
 							}
@@ -151,11 +153,10 @@ int main(int argc, char *argv[]) {
 							write(dopoll.dp_fds[i].fd, list, sizeof(list));
 							printf("numclnt = %d, send list = %s-----LINE\n\n", num_clnt, list);
 							list[4] = '\0';
-							strncpy(clnt_alias[efd], &message[3], sizeof(clnt_alias[efd]));
-
-							strncat(a_alias, clnt_alias[efd], sizeof(a_alias) - 4);
+							strncpy(clnt_alias[efd], &message[3], ASIZE); // NULL is added auto(calloc).
+							printf("%clnt_alias = %s, [%d]\n", clnt_alias[efd], clnt_alias[efd][str_len-4];
+							strncat(a_alias, clnt_alias[efd], ASIZE);
 							strncat(a_alias, "\n", sizeof(char));
-							printf("a_alias = %s", a_alias);
 
 							for (j = 0; j < num_clnt; j++) {
 								if (dopoll.dp_fds[i].fd != clnt_sock[j]) {
@@ -172,7 +173,7 @@ int main(int argc, char *argv[]) {
 						break;
 					case 'w': //1:1 chat
 						j = 0;
-						while (message[3 + j] != ' ') { //find alias
+						while (message[3 + j] != ' ') { //find alias (/w ??..?? sender content)
 							temp[j] = message[3 + j];
 							j++;
 						}
