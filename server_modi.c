@@ -11,6 +11,7 @@ division, thread, AES
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include "8condevpoll.h"
 
 #define BUF_SIZE 1024
@@ -22,6 +23,7 @@ int create_serv_sock();
 
 
 int main(int argc, char *argv[]) {
+	//socket
 	int serv_sock;
 	int clnt_sock[MAXCLNT - 1];
 	char message[BUF_SIZE];
@@ -29,12 +31,13 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in clnt_addr[MAXCLNT - 1];
 	char *clnt_alias[MAXCLNT - 1];
 	socklen_t addr_size;
-
-	int i, j, k, num_ret, tfd;
-	int wfd;
+	//devpoll
+	int i, j, k, num_ret, tfd, wfd;
 	struct pollfd* pollfd = NULL;
 	struct dvpoll dopoll;
-	
+	//thread
+	pthread_t accept;
+
 	int num_clnt = 0;// num_clnt_sock
 	int num_alias = 0;
 
@@ -78,8 +81,9 @@ int main(int argc, char *argv[]) {
 			free(pollfd);
 			error_handler("ioctl DP_POLL failed");
 		}
-
-		for (i = 0; i < num_ret; i++) {
+		//////스레드를 2개, event 감지 시 connect accept이면 1번 스레드, rcv면 2번 스레드로? close는?
+		//어차피 main도 단일 스레드니까 main에서 rcv하는게 낫겠다. 스레드하나 만들어서 connect하고.. 뮤텍스를 써야겠다.
+		for (i = 0; i < num_ret; i++) {/////////여기를 잘라야해. 여기 윗부분은 딱히..
 			if ((dopoll.dp_fds[i].fd == serv_sock) && (num_clnt < MAXCLNT - 1)) { //clnt request connect
 				clnt_sock[num_clnt] = accept(serv_sock, (struct sockaddr*)&clnt_addr[num_clnt], &addr_size);
 				if (clnt_sock[num_clnt] == -1) {
@@ -99,13 +103,9 @@ int main(int argc, char *argv[]) {
 
 			}
 			else { // clnt rcv event
-				   //		printf("[Recieve]-- i = [%d]\n", i);
 				str_len = read(dopoll.dp_fds[i].fd, message, BUF_SIZE);
 				if (str_len == 0) {
-					write(dopoll.dp_fds[i].fd, quit, sizeof(quit));
 					printf("***********Disconnect Client %d\n", dopoll.dp_fds[i].fd);
-
-					//		while(dopoll.dp_fds[i].fd != clnt_sock[j++]);
 
 					for (j = 0; j < num_clnt; j++)
 						if (dopoll.dp_fds[i].fd == clnt_sock[j]) break;
