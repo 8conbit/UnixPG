@@ -1,0 +1,13 @@
+API보다 EVP를 이용하는게 하드웨어 가속이나 이식성 측면에서 좋다.
+따라서 나는 EVP를 사용했다.
+
+EVP_En/Decrypt는 Init -> Update -> Final 순으로 진행된다.
+
+EVP_EncryptInit_ex(&ctx, EVP_aes_128_gcm, ENGINE, key, IV)
+
+EVP_EncryptUpdate(&ctx, cipher, &outLen, plain, plainLen)
+
+EVP_EncryptFinal_ex(&ctx, cipher + outLen, &addLen)
+cipher+outLen은 cipher[outLen]과 같음. 즉 block size와 안맞아서 남는것들 padding해서 암호화하는게 final.
+
+
