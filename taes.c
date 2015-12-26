@@ -44,7 +44,7 @@ int decrypt(unsigned char *plain, unsigned char *cipher, unsigned int cipherLen,
 	EVP_CIPHER_CTX ctx;
 	unsigned long err=0;
 	int subLen = 0, outLen=0;
-	int e = 0;
+
 	ERR_load_crypto_strings();
 	EVP_CIPHER_CTX_init(&ctx);
 
