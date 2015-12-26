@@ -45,7 +45,6 @@ int decrypt(unsigned char *plain, unsigned char *cipher, unsigned int cipherLen,
 	unsigned long err=0;
 	int subLen = 0, outLen=0;
 	int e = 0;
-	
 	ERR_load_crypto_strings();
 	EVP_CIPHER_CTX_init(&ctx);
 
@@ -59,15 +58,12 @@ int decrypt(unsigned char *plain, unsigned char *cipher, unsigned int cipherLen,
 		printf("ERR:EVP_DecryptUpdate - %s\n", ERR_error_string(err,NULL));
 		return -1;
 	}
-	printf("subLen = %d, outLen = %d\n", subLen, outLen);
-	e = EVP_DecryptFinal_ex(&ctx, &plain[outLen], &subLen);
-	printf("errcode = %d\n", e);
-	if(e!= 1){
+/*	if(EVP_DecryptFinal_ex(&ctx, &plain[outLen], &subLen) != 1){
 		err = ERR_get_error();
 		printf("ERR:EVP_DecryptFinal() - %s\n", ERR_error_string(err, NULL));
 		return -1;
 	}
-
+*/
 	EVP_CIPHER_CTX_cleanup(&ctx);
 	ERR_free_strings();
 	printf("subLen = %d, outLen = %d\n", subLen, outLen);
@@ -78,12 +74,13 @@ int decrypt(unsigned char *plain, unsigned char *cipher, unsigned int cipherLen,
 
 int main(void){
 	int clen;
-	char iv[16] = {0}; 
-	char *p = "1234safdkjsadfsaflsafjlsajakjljljkjljkjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjlskgdjls;adfjlsadjflsadfjsladkfjlskadjflsadkjflksdajfl56789a123456789a123456123141984712983718924719827491827498172398172398714917249817378871273917192461969218313";
+	char key[17] = "1234567890123456"; //sizeof(key)=17(actually 4 but..) 16+NULL. but using 16.
+	char iv[13] = "123456789012";  //AES_GCM has IV which is size 96bit (12Byte)
+	char p[] = "123456789012345";
+	printf("plainLen %d\n", strlen(p));
 	char *c = (char*)calloc(1024, sizeof(char));
 	char *p2 = (char*)calloc(1024, sizeof(char));
-	char *key = "123456789112345";
-	clen = encrypt(c, p, strlen(p), key, iv);	
+	clen = encrypt(c, p, strlen(p)+1, key, iv);	
 	printf("%s\n", c);
 	decrypt(p2, c, clen, key, iv);
 	printf("%s\n", p2);
